@@ -200,11 +200,29 @@
     <div class="scan-zone" id="scanZone">
       <div class="corner tl"></div><div class="corner tr"></div>
       <div class="corner bl"></div><div class="corner br"></div>
-      <div class="icon">&#9670;</div>
-      <p>Photograph a card's name plate,<br>or type the name below.</p>
-      <div style="margin-top:14px;">
-        <label class="btn" for="cameraInput">Take photo</label>
-        <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+      <div id="idlePrompt">
+        <div class="icon">&#9670;</div>
+        <p>Photograph a card's name plate,<br>or scan continuously with your camera.</p>
+        <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <label class="btn" for="cameraInput">Take photo</label>
+          <input type="file" id="cameraInput" accept="image/*" capture="environment">
+          <button class="btn ghost" id="liveScanBtn">Scan continuously</button>
+        </div>
+      </div>
+
+      <div id="liveWrap" style="display:none;">
+        <div style="position:relative;border-radius:8px;overflow:hidden;background:#000;">
+          <video id="liveVideo" playsinline muted autoplay style="width:100%;display:block;"></video>
+          <div id="liveTarget" style="position:absolute;left:6%;right:6%;top:42%;height:14%;border:2px solid var(--gold-bright);border-radius:4px;pointer-events:none;"></div>
+        </div>
+        <div class="status-line" id="liveStatus" style="justify-content:center;margin-top:10px;">
+          <span class="spinner"></span><span id="liveStatusText">Align the card's name in the box…</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn jade full" id="liveSearchBtn">Search this name</button>
+          <button class="btn plum" id="liveStopBtn">Stop</button>
+        </div>
       </div>
     </div>
     <div class="preview-wrap" id="previewWrap" style="display:none;">
@@ -267,7 +285,10 @@
     $('collectionView').classList.toggle('active', tab==='collection');
     $('tabScanBtn').classList.toggle('active', tab==='scan');
     $('tabCollectionBtn').classList.toggle('active', tab==='collection');
-    if(tab==='collection') renderCollection();
+    if(tab==='collection'){
+      renderCollection();
+      if(typeof stopLiveScan === 'function') stopLiveScan();
+    }
   }
   $('tabScanBtn').onclick = function(){ switchTab('scan'); };
   $('tabCollectionBtn').onclick = function(){ switchTab('collection'); };
@@ -485,15 +506,67 @@
     };
   }
 
-  var cropCanvas = document.createElement('canvas');
-  function cropTopBand(imgEl){
-    var w = imgEl.naturalWidth, h = imgEl.naturalHeight;
-    var bandH = Math.round(h * 0.13);
-    cropCanvas.width = w;
-    cropCanvas.height = bandH;
-    var ctx = cropCanvas.getContext('2d');
-    ctx.drawImage(imgEl, 0, Math.round(h*0.02), w, bandH, 0, 0, w, bandH);
-    return cropCanvas.toDataURL('image/png');
+  var workCanvas = document.createElement('canvas');
+  var ocrWorkerPromise = null;
+
+  function getOcrWorker(){
+    if(!window.Tesseract || window.__OCR_LOAD_FAILED) return null;
+    if(!ocrWorkerPromise){
+      ocrWorkerPromise = (async function(){
+        var w = await window.Tesseract.createWorker('eng');
+        try{
+          await w.setParameters({
+            tessedit_pageseg_mode: '7',
+            tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-',&. "
+          });
+        }catch(e){}
+        return w;
+      })();
+    }
+    return ocrWorkerPromise;
+  }
+
+  function preprocessToCanvas(sourceEl, sx, sy, sw, sh, invert){
+    var scale = 2.4;
+    var outW = Math.round(sw * scale);
+    var outH = Math.round(sh * scale);
+    workCanvas.width = outW;
+    workCanvas.height = outH;
+    var ctx = workCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(sourceEl, sx, sy, sw, sh, 0, 0, outW, outH);
+    var imgData = ctx.getImageData(0, 0, outW, outH);
+    var d = imgData.data;
+    var min = 255, max = 0;
+    for(var i=0;i<d.length;i+=4){
+      var gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      d[i]=d[i+1]=d[i+2]=gray;
+      if(gray<min) min=gray;
+      if(gray>max) max=gray;
+    }
+    var range = Math.max(max-min, 1);
+    for(var j=0;j<d.length;j+=4){
+      var v = (d[j]-min) * (255/range);
+      if(invert) v = 255 - v;
+      d[j]=d[j+1]=d[j+2]=v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return workCanvas.toDataURL('image/png');
+  }
+
+  function cleanOcrText(raw){
+    return (raw || '').replace(/[^a-zA-Z0-9\-\s,'&.]/g, ' ').replace(/\s+/g,' ').trim();
+  }
+
+  async function recognizeBand(sourceEl, sx, sy, sw, sh){
+    var worker = await getOcrWorker();
+    if(!worker) return {text:'', confidence:0, available:false};
+    var normalImg = preprocessToCanvas(sourceEl, sx, sy, sw, sh, false);
+    var normalRes = await worker.recognize(normalImg);
+    var invertedImg = preprocessToCanvas(sourceEl, sx, sy, sw, sh, true);
+    var invertedRes = await worker.recognize(invertedImg);
+    var best = (invertedRes.data.confidence > normalRes.data.confidence) ? invertedRes.data : normalRes.data;
+    return {text: cleanOcrText(best.text), confidence: best.confidence, available:true};
   }
 
   $('cameraInput').addEventListener('change', function(e){
@@ -503,11 +576,25 @@
     var objectUrl = URL.createObjectURL(file);
     img.onload = async function(){
       $('previewWrap').style.display = 'block';
-      if(window.Tesseract && !window.__OCR_LOAD_FAILED){
-        runOcr(img);
-      } else {
-        $('ocrStatus').style.display = 'flex';
-        $('ocrStatusText').textContent = 'Text scanning unavailable right now — type the card name below';
+      var statusWrap = $('ocrStatus');
+      var statusText = $('ocrStatusText');
+      statusWrap.style.display = 'flex';
+      statusText.textContent = 'Reading card name…';
+      try{
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var sy = Math.round(h * 0.02);
+        var sh = Math.round(h * 0.14);
+        var result = await recognizeBand(img, 0, sy, w, sh);
+        if(!result.available){
+          statusText.textContent = 'Text scanning unavailable right now — type the card name below';
+        } else if(result.text){
+          $('searchInput').value = result.text;
+          statusText.textContent = 'Found: "' + result.text + '" — review and search';
+        } else {
+          statusText.textContent = 'Could not read text clearly — type the name instead';
+        }
+      }catch(err){
+        statusText.textContent = 'Scan failed — type the card name instead';
       }
     };
     img.onerror = function(){
@@ -516,26 +603,79 @@
     img.src = objectUrl;
   });
 
-  async function runOcr(img){
-    var statusWrap = $('ocrStatus');
-    var statusText = $('ocrStatusText');
-    statusWrap.style.display = 'flex';
-    statusText.textContent = 'Reading card name…';
+  var liveStream = null;
+  var liveTimer = null;
+  var liveBusy = false;
+
+  async function startLiveScan(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showError('Camera access is not available in this browser.');
+      return;
+    }
     try{
-      var cropped = cropTopBand(img);
-      var result = await window.Tesseract.recognize(cropped, 'eng');
-      var raw = (result && result.data && result.data.text) ? result.data.text : '';
-      var cleaned = raw.replace(/[^a-zA-Z0-9\-\s,'!]/g, ' ').replace(/\s+/g,' ').trim();
-      if(cleaned){
-        $('searchInput').value = cleaned;
-        statusText.textContent = 'Found: "' + cleaned + '" — review and search';
+      liveStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    }catch(e){
+      showError('Could not access the camera: ' + e.message);
+      return;
+    }
+    $('idlePrompt').style.display = 'none';
+    $('liveWrap').style.display = 'block';
+    var video = $('liveVideo');
+    video.srcObject = liveStream;
+    await video.play();
+
+    liveTimer = setInterval(liveTick, 1400);
+  }
+
+  async function liveTick(){
+    if(liveBusy) return;
+    var video = $('liveVideo');
+    if(!video.videoWidth) return;
+    liveBusy = true;
+    var statusText = $('liveStatusText');
+    try{
+      var targetEl = $('liveTarget');
+      var vidBox = video.getBoundingClientRect();
+      var tgtBox = targetEl.getBoundingClientRect();
+      var scaleX = video.videoWidth / vidBox.width;
+      var scaleY = video.videoHeight / vidBox.height;
+      var sx = Math.round((tgtBox.left - vidBox.left) * scaleX);
+      var sy = Math.round((tgtBox.top - vidBox.top) * scaleY);
+      var sw = Math.round(tgtBox.width * scaleX);
+      var sh = Math.round(tgtBox.height * scaleY);
+      if(sw <= 0 || sh <= 0){ liveBusy = false; return; }
+
+      var result = await recognizeBand(video, sx, sy, sw, sh);
+      if(!result.available){
+        statusText.textContent = 'Text scanning unavailable — type the card name below';
+      } else if(result.text && result.confidence > 35){
+        $('searchInput').value = result.text;
+        statusText.textContent = '"' + result.text + '" — tap Search when ready';
       } else {
-        statusText.textContent = 'Could not read text clearly — type the name instead';
+        statusText.textContent = "Align the card's name in the box…";
       }
     }catch(e){
-      statusText.textContent = 'Scan failed — type the card name instead';
+    }finally{
+      liveBusy = false;
     }
   }
+
+  function stopLiveScan(){
+    if(liveTimer){ clearInterval(liveTimer); liveTimer = null; }
+    if(liveStream){
+      liveStream.getTracks().forEach(function(t){ t.stop(); });
+      liveStream = null;
+    }
+    $('liveWrap').style.display = 'none';
+    $('idlePrompt').style.display = 'block';
+  }
+
+  $('liveScanBtn').onclick = startLiveScan;
+  $('liveStopBtn').onclick = stopLiveScan;
+  $('liveSearchBtn').onclick = function(){
+    var name = $('searchInput').value.trim();
+    if(name) searchCards(name);
+  };
 
   (async function init(){
     await loadCollection();
