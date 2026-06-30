@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Duelist's Ledger</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Duelist's Ledger">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0E1015;
+    --ink-2:#161922;
+    --parchment:#EDE3C8;
+    --parchment-dim:#D9CCA8;
+    --gold:#B8923A;
+    --gold-bright:#E0B655;
+    --amber:#C77B33;
+    --jade:#2E8B6F;
+    --plum:#9C4F76;
+    --red:#A53B3B;
+    --line: rgba(184,146,58,0.35);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--parchment);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:90px;
+  }
+  .app{max-width:520px;margin:0 auto;padding:0 16px;}
+
+  header.top{
+    position:sticky;top:0;z-index:30;
+    background:linear-gradient(180deg, var(--ink) 80%, transparent);
+    padding:18px 16px 10px;
+    margin:0 -16px;
+  }
+  .brandrow{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .brand{
+    font-family:'Cinzel',serif;font-weight:700;
+    font-size:19px;letter-spacing:0.04em;
+    color:var(--gold-bright);
+    display:flex;align-items:center;gap:8px;
+  }
+  .brand .glyph{
+    width:22px;height:22px;border:1.5px solid var(--gold);
+    transform:rotate(45deg);display:inline-flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
+  .brand .glyph span{transform:rotate(-45deg);font-size:11px;color:var(--gold-bright);}
+
+  .total-pill{
+    font-family:'JetBrains Mono',monospace;
+    background:var(--ink-2);border:1px solid var(--line);
+    border-radius:8px;padding:6px 12px;text-align:right;
+  }
+  .total-pill .lbl{font-size:9px;color:var(--parchment-dim);letter-spacing:0.08em;text-transform:uppercase;display:block;}
+  .total-pill .val{font-size:16px;font-weight:600;color:var(--gold-bright);}
+
+  nav.tabs{display:flex;gap:8px;margin-top:14px;}
+  nav.tabs button{
+    flex:1;background:none;border:1px solid var(--line);color:var(--parchment-dim);
+    font-family:'Inter',sans-serif;font-weight:500;font-size:13px;
+    padding:9px 0;border-radius:8px;letter-spacing:0.03em;
+  }
+  nav.tabs button.active{background:var(--gold);border-color:var(--gold);color:#1a1306;}
+
+  section.view{display:none;padding-top:16px;}
+  section.view.active{display:block;}
+
+  .scan-zone{
+    position:relative;border:2px dashed var(--line);border-radius:14px;
+    padding:34px 16px;text-align:center;background:var(--ink-2);
+    overflow:hidden;
+  }
+  .scan-zone .corner{position:absolute;width:22px;height:22px;border:2.5px solid var(--gold);}
+  .scan-zone .corner.tl{top:8px;left:8px;border-right:none;border-bottom:none;}
+  .scan-zone .corner.tr{top:8px;right:8px;border-left:none;border-bottom:none;}
+  .scan-zone .corner.bl{bottom:8px;left:8px;border-right:none;border-top:none;}
+  .scan-zone .corner.br{bottom:8px;right:8px;border-left:none;border-top:none;}
+  .scan-zone p{margin:10px 0 0;color:var(--parchment-dim);font-size:13px;}
+  .scan-zone .icon{font-size:30px;}
+
+  input[type=file]{display:none;}
+  .btn{
+    display:inline-block;font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;
+    border-radius:8px;padding:10px 18px;border:1px solid var(--gold);
+    background:var(--gold);color:#1a1306;letter-spacing:0.02em;cursor:pointer;
+  }
+  .btn.ghost{background:none;color:var(--gold-bright);}
+  .btn.full{width:100%;text-align:center;}
+  .btn.jade{background:var(--jade);border-color:var(--jade);color:#08231b;}
+  .btn.plum{background:none;border-color:var(--plum);color:#e6b9cf;}
+  .btn:disabled{opacity:0.45;}
+
+  .preview-wrap{margin-top:14px;text-align:center;}
+  .preview-wrap img{max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--line);}
+
+  .status-line{font-size:12.5px;color:var(--parchment-dim);margin-top:10px;display:flex;align-items:center;gap:8px;}
+  .spinner{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--gold-bright);animation:spin 0.8s linear infinite;flex-shrink:0;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .field{margin-top:14px;}
+  .field label{display:block;font-size:11.5px;color:var(--parchment-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:5px;}
+  .field input[type=text], .field select{
+    width:100%;background:var(--ink-2);border:1px solid var(--line);color:var(--parchment);
+    font-family:'Inter',sans-serif;font-size:14.5px;padding:10px 12px;border-radius:8px;
+  }
+  .field input[type=text]:focus, .field select:focus{outline:1.5px solid var(--gold-bright);}
+
+  .resultgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+  .card-frame{
+    background:var(--parchment);border:2.5px solid var(--gold);border-radius:10px;
+    padding:6px;cursor:pointer;color:#1a1306;
+  }
+  .card-frame .name{
+    font-family:'Cinzel',serif;font-weight:700;font-size:10.5px;line-height:1.2;
+    text-align:center;padding:2px 2px 5px;min-height:26px;display:flex;align-items:center;justify-content:center;
+  }
+  .card-frame img{width:100%;border-radius:4px;border:1px solid var(--gold);display:block;}
+  .card-frame .statbox{
+    margin-top:6px;background:#1a1306;border-radius:5px;padding:4px 6px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .card-frame .statbox .price{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;color:var(--gold-bright);}
+  .card-frame .statbox .setname{font-size:8.5px;color:var(--parchment-dim);max-width:60%;text-align:right;line-height:1.15;}
+
+  .empty{text-align:center;padding:50px 20px;color:var(--parchment-dim);}
+  .empty .icon{font-size:34px;margin-bottom:10px;}
+  .empty h3{font-family:'Cinzel',serif;color:var(--gold-bright);font-size:16px;margin:0 0 6px;}
+  .empty p{font-size:13px;margin:0;}
+
+  .collection-list{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+  .crow{
+    display:flex;gap:10px;background:var(--ink-2);border:1px solid var(--line);border-radius:10px;padding:8px;
+  }
+  .crow img{width:54px;border-radius:5px;border:1px solid var(--gold);flex-shrink:0;height:fit-content;}
+  .crow .info{flex:1;min-width:0;}
+  .crow .info .nm{font-family:'Cinzel',serif;font-weight:700;font-size:13px;color:var(--gold-bright);line-height:1.25;}
+  .crow .info .meta{font-size:11px;color:var(--parchment-dim);margin-top:3px;}
+  .crow .info .meta span{margin-right:8px;}
+  .crow .qtyrow{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .qbtn{width:24px;height:24px;border-radius:5px;border:1px solid var(--line);background:var(--ink);color:var(--parchment);font-size:14px;line-height:1;}
+  .qtyrow .qn{font-family:'JetBrains Mono',monospace;font-size:13px;min-width:16px;text-align:center;}
+  .crow .right{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;flex-shrink:0;}
+  .crow .linetotal{font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--gold-bright);font-size:14px;}
+  .crow .del{background:none;border:none;color:#c97a7a;font-size:11px;padding:2px;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(8,9,12,0.78);z-index:50;
+    display:flex;align-items:flex-end;justify-content:center;
+  }
+  .modal{
+    background:var(--ink-2);border:1px solid var(--line);border-radius:16px 16px 0 0;
+    width:100%;max-width:520px;padding:18px 18px 24px;max-height:85vh;overflow-y:auto;
+  }
+  .modal h3{font-family:'Cinzel',serif;color:var(--gold-bright);margin:0 0 4px;font-size:17px;}
+  .modal .sub{font-size:12px;color:var(--parchment-dim);margin-bottom:14px;}
+  .modal-row{display:flex;gap:10px;}
+  .modal-row .field{flex:1;}
+  .closebar{display:flex;justify-content:flex-end;margin-bottom:6px;}
+  .closebar button{background:none;border:none;color:var(--parchment-dim);font-size:13px;}
+
+  .note{font-size:11.5px;color:var(--parchment-dim);margin-top:8px;line-height:1.5;}
+  .note a{color:var(--gold-bright);}
+
+  #errorBanner{
+    display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:90;
+    background:#3a1414;border:1px solid #A53B3B;color:#f3cfcf;border-radius:10px;
+    padding:10px 12px;font-size:12px;line-height:1.5;
+  }
+  #errorBanner .ttl{font-weight:600;color:#ff9d9d;margin-bottom:3px;}
+  #errorBanner button{background:none;border:none;color:#f3cfcf;float:right;font-size:13px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brandrow">
+      <div class="brand"><span class="glyph"><span>D</span></span> Duelist's Ledger</div>
+      <div class="total-pill">
+        <span class="lbl">Collection value</span>
+        <span class="val" id="totalValue">£0.00</span>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button id="tabScanBtn" class="active">Scan</button>
+      <button id="tabCollectionBtn">Collection</button>
+    </nav>
+  </header>
+
+  <section id="scanView" class="view active">
+    <div class="scan-zone" id="scanZone">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="icon">&#9670;</div>
+      <p>Photograph a card's name plate,<br>or type the name below.</p>
+      <div style="margin-top:14px;">
+        <label class="btn" for="cameraInput">Take photo</label>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment">
+      </div>
+    </div>
+    <div class="preview-wrap" id="previewWrap" style="display:none;">
+      <img id="previewImg">
+      <div class="status-line" id="ocrStatus" style="display:none;justify-content:center;">
+        <span class="spinner"></span><span id="ocrStatusText">Reading card name…</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="searchInput">Card name</label>
+      <input type="text" id="searchInput" placeholder="e.g. Blue-Eyes White Dragon">
+    </div>
+    <button class="btn full" id="searchBtn" style="margin-top:10px;">Search Cardmarket</button>
+    <div class="status-line" id="searchStatus" style="display:none;">
+      <span class="spinner"></span><span id="searchStatusText">Searching…</span>
+    </div>
+
+    <div class="resultgrid" id="resultGrid"></div>
+    <p class="note" id="emptyResultsNote" style="display:none;">No matches. Check the spelling, or try just the first few words of the name.</p>
+  </section>
+
+  <section id="collectionView" class="view">
+    <div id="collectionContent"></div>
+  </section>
+
+</div>
+
+<div id="modalRoot"></div>
+<div id="errorBanner"><button id="errorBannerClose">&times;</button><div class="ttl">Something went wrong</div><div id="errorBannerMsg"></div></div>
+
+<script>
+  function showError(msg){
+    var el = document.getElementById('errorBanner');
+    var m = document.getElementById('errorBannerMsg');
+    if(m) m.textContent = msg;
+    if(el) el.style.display = 'block';
+  }
+  window.addEventListener('error', function(e){ showError(e.message || 'Unknown script error'); });
+  window.addEventListener('unhandledrejection', function(e){ showError((e.reason && e.reason.message) ? e.reason.message : String(e.reason)); });
+  document.addEventListener('DOMContentLoaded', function(){
+    var c = document.getElementById('errorBannerClose');
+    if(c) c.onclick = function(){ document.getElementById('errorBanner').style.display = 'none'; };
+  });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.5/tesseract.min.js" onerror="window.__OCR_LOAD_FAILED=true"></script>
+<script>
+(function(){
+  var YGOPRODECK = 'https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=';
+  var FX_URL = 'https://api.frankfurter.app/latest?from=EUR&to=GBP';
+  var FALLBACK_RATE = 0.86;
+  var fxRate = null;
+
+  var state = { collection: {} };
+
+  function $(id){ return document.getElementById(id); }
+
+  function switchTab(tab){
+    $('scanView').classList.toggle('active', tab==='scan');
+    $('collectionView').classList.toggle('active', tab==='collection');
+    $('tabScanBtn').classList.toggle('active', tab==='scan');
+    $('tabCollectionBtn').classList.toggle('active', tab==='collection');
+    if(tab==='collection') renderCollection();
+  }
+  $('tabScanBtn').onclick = function(){ switchTab('scan'); };
+  $('tabCollectionBtn').onclick = function(){ switchTab('collection'); };
+
+  function fmtGBP(n){
+    return '£' + n.toLocaleString('en-GB', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  async function getRate(){
+    if(fxRate) return fxRate;
+    try{
+      var res = await fetch(FX_URL);
+      var data = await res.json();
+      if(data && data.rates && data.rates.GBP){
+        fxRate = data.rates.GBP;
+        return fxRate;
+      }
+    }catch(e){}
+    fxRate = FALLBACK_RATE;
+    return fxRate;
+  }
+
+  function eurToGbp(eur){
+    var rate = fxRate || FALLBACK_RATE;
+    return eur * rate;
+  }
+
+  async function loadCollection(){
+    try{
+      var raw = localStorage.getItem('dl_collection');
+      if(raw){
+        state.collection = JSON.parse(raw);
+      }
+    }catch(e){
+      state.collection = {};
+    }
+  }
+
+  async function saveCollection(){
+    try{
+      localStorage.setItem('dl_collection', JSON.stringify(state.collection));
+    }catch(e){
+      showError('Could not save your collection: ' + e.message);
+    }
+  }
+
+  function updateTotal(){
+    var total = 0;
+    Object.values(state.collection).forEach(function(item){
+      total += (item.priceGbp || 0) * item.qty;
+    });
+    $('totalValue').textContent = fmtGBP(total);
+  }
+
+  function renderCollection(){
+    var items = Object.keys(state.collection).map(function(k){ return Object.assign({key:k}, state.collection[k]); });
+    var container = $('collectionContent');
+    if(items.length === 0){
+      container.innerHTML = '<div class="empty"><div class="icon">&#9670;</div><h3>No cards yet</h3><p>Scan or search a card to add it to your collection.</p></div>';
+      updateTotal();
+      return;
+    }
+    items.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    var html = '<div class="collection-list">';
+    items.forEach(function(it){
+      var lineTotal = (it.priceGbp || 0) * it.qty;
+      html += '<div class="crow">' +
+        '<img src="'+it.image+'">' +
+        '<div class="info">' +
+          '<div class="nm">'+escapeHtml(it.name)+'</div>' +
+          '<div class="meta"><span>'+escapeHtml(it.edition)+'</span><span>'+escapeHtml(it.condition)+'</span></div>' +
+          '<div class="qtyrow">' +
+            '<button class="qbtn" data-act="dec" data-key="'+it.key+'">−</button>' +
+            '<span class="qn">'+it.qty+'</span>' +
+            '<button class="qbtn" data-act="inc" data-key="'+it.key+'">+</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="right">' +
+          '<div class="linetotal">'+fmtGBP(lineTotal)+'</div>' +
+          '<button class="del" data-act="del" data-key="'+it.key+'">Remove</button>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+
+    container.querySelectorAll('[data-act]').forEach(function(btn){
+      btn.onclick = function(){
+        var key = btn.getAttribute('data-key');
+        var act = btn.getAttribute('data-act');
+        if(act==='inc'){ state.collection[key].qty += 1; }
+        if(act==='dec'){ state.collection[key].qty = Math.max(1, state.collection[key].qty - 1); }
+        if(act==='del'){ delete state.collection[key]; }
+        saveCollection();
+        renderCollection();
+      };
+    });
+    updateTotal();
+  }
+
+  function escapeHtml(s){
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : s;
+    return d.innerHTML;
+  }
+
+  async function searchCards(name){
+    var grid = $('resultGrid');
+    var note = $('emptyResultsNote');
+    grid.innerHTML = '';
+    note.style.display = 'none';
+    $('searchStatus').style.display = 'flex';
+    try{
+      await getRate();
+      var res = await fetch(YGOPRODECK + encodeURIComponent(name));
+      var data = await res.json().catch(function(){ return null; });
+      if(!res.ok){
+        var apiMsg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+        note.textContent = 'No matches: ' + apiMsg;
+        note.style.display = 'block';
+        return;
+      }
+      var cards = (data && data.data) ? data.data.slice(0, 8) : [];
+      if(cards.length === 0){
+        note.style.display = 'block';
+        return;
+      }
+      cards.forEach(function(card){
+        var img = (card.card_images && card.card_images[0]) ? card.card_images[0].image_url_small : '';
+        var priceEur = 0;
+        if(card.card_prices && card.card_prices[0] && card.card_prices[0].cardmarket_price){
+          priceEur = parseFloat(card.card_prices[0].cardmarket_price) || 0;
+        }
+        var priceGbp = eurToGbp(priceEur);
+        var setName = (card.card_sets && card.card_sets[0]) ? card.card_sets[0].set_name : (card.type || '');
+        var frame = document.createElement('div');
+        frame.className = 'card-frame';
+        frame.innerHTML = '<div class="name">'+escapeHtml(card.name)+'</div>' +
+          '<img src="'+img+'">' +
+          '<div class="statbox"><span class="price">'+fmtGBP(priceGbp)+'</span><span class="setname">'+escapeHtml(setName)+'</span></div>';
+        frame.onclick = function(){ openAddModal(card, img, priceGbp); };
+        grid.appendChild(frame);
+      });
+    }catch(e){
+      note.textContent = 'Could not reach the card database: ' + e.message;
+      note.style.display = 'block';
+      showError('Search failed: ' + e.message);
+    }finally{
+      $('searchStatus').style.display = 'none';
+    }
+  }
+
+  $('searchBtn').onclick = function(){
+    var name = $('searchInput').value.trim();
+    if(name) searchCards(name);
+  };
+  $('searchInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ $('searchBtn').click(); }
+  });
+
+  function openAddModal(card, img, priceGbp){
+    var root = $('modalRoot');
+    var div = document.createElement('div');
+    div.className = 'modal-overlay';
+    div.innerHTML =
+      '<div class="modal">' +
+        '<div class="closebar"><button id="modalClose">Close</button></div>' +
+        '<h3>'+escapeHtml(card.name)+'</h3>' +
+        '<div class="sub">'+fmtGBP(priceGbp)+' &middot; Cardmarket average price</div>' +
+        '<div class="modal-row">' +
+          '<div class="field"><label>Edition</label>' +
+            '<select id="modalEdition">' +
+              '<option>Unlimited</option>' +
+              '<option>1st Edition</option>' +
+              '<option>Limited Edition</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="field"><label>Condition</label>' +
+            '<select id="modalCondition">' +
+              '<option>Near Mint</option>' +
+              '<option>Mint</option>' +
+              '<option>Excellent</option>' +
+              '<option>Good</option>' +
+              '<option>Light Played</option>' +
+              '<option>Played</option>' +
+              '<option>Poor</option>' +
+            '</select>' +
+          '</div>' +
+        '</div>' +
+        '<div class="field"><label>Quantity</label><input type="text" id="modalQty" value="1" inputmode="numeric"></div>' +
+        '<button class="btn jade full" id="modalSave" style="margin-top:16px;">Add to collection</button>' +
+      '</div>';
+    root.innerHTML = '';
+    root.appendChild(div);
+
+    document.getElementById('modalClose').onclick = function(){ root.innerHTML=''; };
+    div.onclick = function(e){ if(e.target === div) root.innerHTML=''; };
+    document.getElementById('modalSave').onclick = function(){
+      var edition = document.getElementById('modalEdition').value;
+      var condition = document.getElementById('modalCondition').value;
+      var qty = parseInt(document.getElementById('modalQty').value, 10) || 1;
+      var key = card.id + '-' + edition + '-' + condition;
+      if(state.collection[key]){
+        state.collection[key].qty += qty;
+      } else {
+        state.collection[key] = {
+          id: card.id, name: card.name, image: img,
+          edition: edition, condition: condition, qty: qty,
+          priceGbp: priceGbp
+        };
+      }
+      saveCollection();
+      root.innerHTML = '';
+      switchTab('collection');
+    };
+  }
+
+  var cropCanvas = document.createElement('canvas');
+  function cropTopBand(imgEl){
+    var w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    var bandH = Math.round(h * 0.13);
+    cropCanvas.width = w;
+    cropCanvas.height = bandH;
+    var ctx = cropCanvas.getContext('2d');
+    ctx.drawImage(imgEl, 0, Math.round(h*0.02), w, bandH, 0, 0, w, bandH);
+    return cropCanvas.toDataURL('image/png');
+  }
+
+  $('cameraInput').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var img = $('previewImg');
+    var objectUrl = URL.createObjectURL(file);
+    img.onload = async function(){
+      $('previewWrap').style.display = 'block';
+      if(window.Tesseract && !window.__OCR_LOAD_FAILED){
+        runOcr(img);
+      } else {
+        $('ocrStatus').style.display = 'flex';
+        $('ocrStatusText').textContent = 'Text scanning unavailable right now — type the card name below';
+      }
+    };
+    img.onerror = function(){
+      showError('Could not load that photo. Try taking it again.');
+    };
+    img.src = objectUrl;
+  });
+
+  async function runOcr(img){
+    var statusWrap = $('ocrStatus');
+    var statusText = $('ocrStatusText');
+    statusWrap.style.display = 'flex';
+    statusText.textContent = 'Reading card name…';
+    try{
+      var cropped = cropTopBand(img);
+      var result = await window.Tesseract.recognize(cropped, 'eng');
+      var raw = (result && result.data && result.data.text) ? result.data.text : '';
+      var cleaned = raw.replace(/[^a-zA-Z0-9\-\s,'!]/g, ' ').replace(/\s+/g,' ').trim();
+      if(cleaned){
+        $('searchInput').value = cleaned;
+        statusText.textContent = 'Found: "' + cleaned + '" — review and search';
+      } else {
+        statusText.textContent = 'Could not read text clearly — type the name instead';
+      }
+    }catch(e){
+      statusText.textContent = 'Scan failed — type the card name instead';
+    }
+  }
+
+  (async function init(){
+    await loadCollection();
+    await getRate();
+    updateTotal();
+  })();
+})();
+</script>
+</body>
+</html>
